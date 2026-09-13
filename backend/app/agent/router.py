@@ -56,11 +56,23 @@ class AgentRouter:
                 reason = f"Query matched Ship 30 keyword '{kw}'"
                 return "ship30", reason
 
-        # Check Artifact Generation keywords
-        for kw in ARTIFACT_KEYWORDS:
-            if kw in q_lower:
-                reason = f"Query matched Artifact Generation keyword '{kw}'"
-                return "artifact_gen", reason
+        # Artifact requests commonly combine an action with a format or UI term.
+        artifact_action = any(
+            phrase in q_lower
+            for phrase in ("generate", "create", "build", "make", "design")
+        )
+        artifact_target = any(
+            phrase in q_lower
+            for phrase in (
+                "artifact", "html", "markdown", "component", "dashboard",
+                "ui", "snippet", "document",
+            )
+        )
+        if (artifact_action and artifact_target) or any(
+            kw in q_lower for kw in ARTIFACT_KEYWORDS
+        ):
+            reason = "Query matched Artifact Generation intent"
+            return "artifact_gen", reason
 
         # Default fallback to Grounded Q&A
         reason = "Default fallback for factual/analytical knowledge base query"

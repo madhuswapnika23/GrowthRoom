@@ -144,6 +144,22 @@ class FallbackMockProvider(LLMProvider):
 
     def generate(self, prompt: str, system: str | None = None, temperature: float = 0.2) -> str:
         logger.warning("Using FallbackMockProvider to generate answer")
+        if system and "Artifact Generator" in system:
+            return (
+                '{"type":"html","content":"'
+                '<section style=\\"font-family:system-ui,sans-serif;padding:24px;'
+                'color:#1f2937;background:#ffffff;max-width:720px;\\">'
+                '<h2 style=\\"margin:0 0 20px;\\">Retention metrics</h2>'
+                '<div style=\\"display:grid;grid-template-columns:repeat(3,1fr);'
+                'gap:12px;\\">'
+                '<div style=\\"padding:16px;background:#f3f4f6;border-radius:8px;\\">'
+                '<small>Activation</small><strong style=\\"display:block;font-size:24px;\\">68%</strong></div>'
+                '<div style=\\"padding:16px;background:#f3f4f6;border-radius:8px;\\">'
+                '<small>Day 30 retention</small><strong style=\\"display:block;font-size:24px;\\">42%</strong></div>'
+                '<div style=\\"padding:16px;background:#f3f4f6;border-radius:8px;\\">'
+                '<small>Weekly active users</small><strong style=\\"display:block;font-size:24px;\\">18.4k</strong></div>'
+                '</div></section>"}'
+            )
         # Extract context if present in prompt
         if "No relevant context found" in prompt or "NOT ENOUGH MATERIAL" in prompt:
             return "I don't have enough source material in the knowledge base to answer this question accurately."

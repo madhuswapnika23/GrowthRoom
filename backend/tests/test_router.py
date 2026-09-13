@@ -27,3 +27,11 @@ def test_router_artifact_gen_doc_request():
     skill_name, reason = router.route(query)
     assert skill_name == "artifact_gen"
     assert "artifact" in reason.lower() or "html" in reason.lower()
+
+
+def test_router_artifact_gen_generated_html_component_request():
+    router = get_router()
+    query = "Generate an HTML component showing a retention metrics dashboard"
+    skill_name, reason = router.route(query)
+    assert skill_name == "artifact_gen"
+    assert "artifact" in reason.lower()
