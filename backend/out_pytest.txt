@@ -1,0 +1,575 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.3.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+plugins: anyio-4.15.1
+collecting ... collected 2 items
+
+tests/test_retrieval.py::TestRetrieval::test_known_query_returns_expected_result ERROR [ 50%]
+tests/test_retrieval.py::TestRetrieval::test_growth_query_returns_growth_chunk ERROR [100%]
+
+==================================== ERRORS ====================================
+___ ERROR at setup of TestRetrieval.test_known_query_returns_expected_result ___
+
+self = <sqlalchemy.engine.base.Connection object at 0x78df5dc68590>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x78df5dc69070>
+parameters = [{}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+cursor = <cursor object at 0x78df5dc8ec50; closed: -1>
+statement = '\n        INSERT INTO kb_chunks (\n            episode_title, guest, youtube_url, publish_date,\n            chunk_in...n            content_hash = EXCLUDED.content_hash\n        WHERE kb_chunks.content_hash != EXCLUDED.content_hash\n    '
+parameters = {}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       psycopg2.errors.SyntaxError: syntax error at or near "%"
+E       LINE 6:             %(p_episode_title)s, %(p_guest)s, %(p_youtube_ur...
+E                           ^
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py:941: SyntaxError
+
+The above exception was the direct cause of the following exception:
+
+    @pytest.fixture(scope="module")
+    def db_with_test_data():
+        """
+        Insert known test chunks and yield a DB session.
+        Cleans up after tests.
+        """
+        db = _get_test_db()
+    
+        # Ensure pgvector extension exists
+        db.execute(sql_text("CREATE EXTENSION IF NOT EXISTS vector"))
+        db.commit()
+    
+        embedder = get_embedding_service()
+    
+        test_chunks_data = [
+            {
+                "episode_title": f"{_TEST_PREFIX} Product-Market Fit Deep Dive",
+                "guest": "Test Guest PMF",
+                "youtube_url": "https://youtube.com/test-pmf",
+                "chunk_text": (
+                    "Product-market fit is the degree to which a product satisfies "
+                    "a strong market demand. It's the moment when your product "
+                    "resonates with customers and they can't imagine going back. "
+                    "The key indicators are retention, word of mouth, and organic growth."
+                ),
+            },
+            {
+                "episode_title": f"{_TEST_PREFIX} Growth Strategy Masterclass",
+                "guest": "Test Guest Growth",
+                "youtube_url": "https://youtube.com/test-growth",
+                "chunk_text": (
+                    "Growth strategy involves identifying the key levers that drive "
+                    "user acquisition, activation, retention, and monetization. "
+                    "The AARRR framework is fundamental. Focus on the metric that "
+                    "matters most for your stage."
+                ),
+            },
+            {
+                "episode_title": f"{_TEST_PREFIX} Engineering Leadership",
+                "guest": "Test Guest Eng",
+                "youtube_url": "https://youtube.com/test-eng",
+                "chunk_text": (
+                    "Cooking a perfect soufflé requires patience and precise "
+                    "temperature control. The eggs must be at room temperature "
+                    "and the oven preheated to exactly 375 degrees Fahrenheit."
+                ),
+            },
+        ]
+    
+        # Generate embeddings
+        texts = [c["chunk_text"] for c in test_chunks_data]
+        embeddings = embedder.embed(texts)
+    
+        records = []
+        for i, (chunk_data, emb) in enumerate(zip(test_chunks_data, embeddings)):
+            records.append(
+                ChunkRecord(
+                    episode_title=chunk_data["episode_title"],
+                    guest=chunk_data["guest"],
+                    youtube_url=chunk_data["youtube_url"],
+                    publish_date=None,
+                    chunk_index=0,
+                    chunk_text=chunk_data["chunk_text"],
+                    token_count=len(chunk_data["chunk_text"].split()),
+                    embedding=emb,
+                )
+            )
+    
+>       upsert_chunks(db, records)
+
+tests/test_retrieval.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+app/ingestion/store.py:80: in upsert_chunks
+    result = db.execute(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2362: in execute
+    return self._execute_internal(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2256: in _execute_internal
+    result = conn.execute(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1418: in execute
+    return meth(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:515: in _execute_on_connection
+    return connection._execute_clauseelement(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1640: in _execute_clauseelement
+    ret = self._execute_context(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+cursor = <cursor object at 0x78df5dc8ec50; closed: -1>
+statement = '\n        INSERT INTO kb_chunks (\n            episode_title, guest, youtube_url, publish_date,\n            chunk_in...n            content_hash = EXCLUDED.content_hash\n        WHERE kb_chunks.content_hash != EXCLUDED.content_hash\n    '
+parameters = {}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.ProgrammingError: (psycopg2.errors.SyntaxError) syntax error at or near "%"
+E       LINE 6:             %(p_episode_title)s, %(p_guest)s, %(p_youtube_ur...
+E                           ^
+E       
+E       [SQL: 
+E               INSERT INTO kb_chunks (
+E                   episode_title, guest, youtube_url, publish_date,
+E                   chunk_index, chunk_text, token_count, embedding, content_hash
+E               ) VALUES (
+E                   %%(p_episode_title)s, %%(p_guest)s, %%(p_youtube_url)s, %%(p_publish_date)s,
+E                   %%(p_chunk_index)s, %%(p_chunk_text)s, %%(p_token_count)s,
+E                   %%(p_embedding)s::vector, %%(p_content_hash)s
+E               )
+E               ON CONFLICT (episode_title, chunk_index) DO UPDATE SET
+E                   guest = EXCLUDED.guest,
+E                   youtube_url = EXCLUDED.youtube_url,
+E                   publish_date = EXCLUDED.publish_date,
+E                   chunk_text = EXCLUDED.chunk_text,
+E                   token_count = EXCLUDED.token_count,
+E                   embedding = EXCLUDED.embedding,
+E                   content_hash = EXCLUDED.content_hash
+E               WHERE kb_chunks.content_hash != EXCLUDED.content_hash
+E           ]
+E       (Background on this error at: https://sqlalche.me/e/20/f405)
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py:941: ProgrammingError
+---------------------------- Captured stderr setup -----------------------------
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files:  20%|██        | 1/5 [00:00<00:03,  1.12it/s]Fetching 5 files: 100%|██████████| 5/5 [00:33<00:00,  6.77s/it]Fetching 5 files: 100%|██████████| 5/5 [00:33<00:00,  6.77s/it]
+____ ERROR at setup of TestRetrieval.test_growth_query_returns_growth_chunk ____
+
+self = <sqlalchemy.engine.base.Connection object at 0x78df5dc68590>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x78df5dc69070>
+parameters = [{}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+cursor = <cursor object at 0x78df5dc8ec50; closed: -1>
+statement = '\n        INSERT INTO kb_chunks (\n            episode_title, guest, youtube_url, publish_date,\n            chunk_in...n            content_hash = EXCLUDED.content_hash\n        WHERE kb_chunks.content_hash != EXCLUDED.content_hash\n    '
+parameters = {}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       psycopg2.errors.SyntaxError: syntax error at or near "%"
+E       LINE 6:             %(p_episode_title)s, %(p_guest)s, %(p_youtube_ur...
+E                           ^
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py:941: SyntaxError
+
+The above exception was the direct cause of the following exception:
+
+    @pytest.fixture(scope="module")
+    def db_with_test_data():
+        """
+        Insert known test chunks and yield a DB session.
+        Cleans up after tests.
+        """
+        db = _get_test_db()
+    
+        # Ensure pgvector extension exists
+        db.execute(sql_text("CREATE EXTENSION IF NOT EXISTS vector"))
+        db.commit()
+    
+        embedder = get_embedding_service()
+    
+        test_chunks_data = [
+            {
+                "episode_title": f"{_TEST_PREFIX} Product-Market Fit Deep Dive",
+                "guest": "Test Guest PMF",
+                "youtube_url": "https://youtube.com/test-pmf",
+                "chunk_text": (
+                    "Product-market fit is the degree to which a product satisfies "
+                    "a strong market demand. It's the moment when your product "
+                    "resonates with customers and they can't imagine going back. "
+                    "The key indicators are retention, word of mouth, and organic growth."
+                ),
+            },
+            {
+                "episode_title": f"{_TEST_PREFIX} Growth Strategy Masterclass",
+                "guest": "Test Guest Growth",
+                "youtube_url": "https://youtube.com/test-growth",
+                "chunk_text": (
+                    "Growth strategy involves identifying the key levers that drive "
+                    "user acquisition, activation, retention, and monetization. "
+                    "The AARRR framework is fundamental. Focus on the metric that "
+                    "matters most for your stage."
+                ),
+            },
+            {
+                "episode_title": f"{_TEST_PREFIX} Engineering Leadership",
+                "guest": "Test Guest Eng",
+                "youtube_url": "https://youtube.com/test-eng",
+                "chunk_text": (
+                    "Cooking a perfect soufflé requires patience and precise "
+                    "temperature control. The eggs must be at room temperature "
+                    "and the oven preheated to exactly 375 degrees Fahrenheit."
+                ),
+            },
+        ]
+    
+        # Generate embeddings
+        texts = [c["chunk_text"] for c in test_chunks_data]
+        embeddings = embedder.embed(texts)
+    
+        records = []
+        for i, (chunk_data, emb) in enumerate(zip(test_chunks_data, embeddings)):
+            records.append(
+                ChunkRecord(
+                    episode_title=chunk_data["episode_title"],
+                    guest=chunk_data["guest"],
+                    youtube_url=chunk_data["youtube_url"],
+                    publish_date=None,
+                    chunk_index=0,
+                    chunk_text=chunk_data["chunk_text"],
+                    token_count=len(chunk_data["chunk_text"].split()),
+                    embedding=emb,
+                )
+            )
+    
+>       upsert_chunks(db, records)
+
+tests/test_retrieval.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+app/ingestion/store.py:80: in upsert_chunks
+    result = db.execute(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2362: in execute
+    return self._execute_internal(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2256: in _execute_internal
+    result = conn.execute(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1418: in execute
+    return meth(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:515: in _execute_on_connection
+    return connection._execute_clauseelement(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1640: in _execute_clauseelement
+    ret = self._execute_context(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x78df60d17380>
+cursor = <cursor object at 0x78df5dc8ec50; closed: -1>
+statement = '\n        INSERT INTO kb_chunks (\n            episode_title, guest, youtube_url, publish_date,\n            chunk_in...n            content_hash = EXCLUDED.content_hash\n        WHERE kb_chunks.content_hash != EXCLUDED.content_hash\n    '
+parameters = {}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x78df5dc690a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.ProgrammingError: (psycopg2.errors.SyntaxError) syntax error at or near "%"
+E       LINE 6:             %(p_episode_title)s, %(p_guest)s, %(p_youtube_ur...
+E                           ^
+E       
+E       [SQL: 
+E               INSERT INTO kb_chunks (
+E                   episode_title, guest, youtube_url, publish_date,
+E                   chunk_index, chunk_text, token_count, embedding, content_hash
+E               ) VALUES (
+E                   %%(p_episode_title)s, %%(p_guest)s, %%(p_youtube_url)s, %%(p_publish_date)s,
+E                   %%(p_chunk_index)s, %%(p_chunk_text)s, %%(p_token_count)s,
+E                   %%(p_embedding)s::vector, %%(p_content_hash)s
+E               )
+E               ON CONFLICT (episode_title, chunk_index) DO UPDATE SET
+E                   guest = EXCLUDED.guest,
+E                   youtube_url = EXCLUDED.youtube_url,
+E                   publish_date = EXCLUDED.publish_date,
+E                   chunk_text = EXCLUDED.chunk_text,
+E                   token_count = EXCLUDED.token_count,
+E                   embedding = EXCLUDED.embedding,
+E                   content_hash = EXCLUDED.content_hash
+E               WHERE kb_chunks.content_hash != EXCLUDED.content_hash
+E           ]
+E       (Background on this error at: https://sqlalche.me/e/20/f405)
+
+/usr/local/lib/python3.12/site-packages/sqlalchemy/engine/default.py:941: ProgrammingError
+=============================== warnings summary ===============================
+tests/test_retrieval.py::TestRetrieval::test_known_query_returns_expected_result
+  /usr/local/lib/python3.12/site-packages/huggingface_hub/file_download.py:1727: DeprecationWarning: hf_xet.download_files() is deprecated. Use XetSession().new_file_download_group().start_download_file() instead.
+    xet_get(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_retrieval.py::TestRetrieval::test_known_query_returns_expected_result
+ERROR tests/test_retrieval.py::TestRetrieval::test_growth_query_returns_growth_chunk
+======================== 1 warning, 2 errors in 41.02s =========================

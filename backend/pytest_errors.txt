@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.3.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+plugins: anyio-4.15.1
+collecting ... collected 3 items
+
+tests/test_api_persistence.py::test_api_contract_and_persistence ERROR   [ 33%]
+tests/test_retrieval.py::TestRetrieval::test_known_query_returns_expected_result PASSED [ 66%]
+tests/test_retrieval.py::TestRetrieval::test_growth_query_returns_growth_chunk FAILED [100%]
+
+==================================== ERRORS ====================================
+_____________ ERROR at setup of test_api_contract_and_persistence ______________
+file /app/tests/test_api_persistence.py, line 10
+  def test_api_contract_and_persistence(client: TestClient, db: Session):
+E       fixture 'client' not found
+>       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/app/tests/test_api_persistence.py:10
+=================================== FAILURES ===================================
+_____________ TestRetrieval.test_growth_query_returns_growth_chunk _____________
+
+self = <tests.test_retrieval.TestRetrieval object at 0x79907ddaf260>
+db_with_test_data = <sqlalchemy.orm.session.Session object at 0x799080d2db20>
+
+    def test_growth_query_returns_growth_chunk(self, db_with_test_data):
+        """
+        Querying about growth metrics should return the growth strategy chunk
+        with a higher score than the unrelated cooking chunk.
+        """
+        db = db_with_test_data
+        results = retrieve("How to grow a startup and improve retention", db=db, top_k=5)
+    
+>       assert len(results) > 0
+E       assert 0 > 0
+E        +  where 0 = len([])
+
+tests/test_retrieval.py:143: AssertionError
+=============================== warnings summary ===============================
+../usr/local/lib/python3.12/site-packages/starlette/testclient.py:40
+  /usr/local/lib/python3.12/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_retrieval.py::TestRetrieval::test_growth_query_returns_growth_chunk
+ERROR tests/test_api_persistence.py::test_api_contract_and_persistence
+=============== 1 failed, 1 passed, 1 warning, 1 error in 6.87s ================
