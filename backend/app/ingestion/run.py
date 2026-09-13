@@ -81,27 +81,24 @@ def run_ingestion(
 
     logger.info("Total chunks: %d", len(all_chunk_records))
 
-    # 4. Embed
+    # 4. Embed and store each batch so an interrupted run keeps its progress.
     logger.info("=== Step 4: Generating embeddings ===")
     embedder = get_embedding_service()
-    # Embed in batches for progress visibility
     batch_size = 256
-    all_embeddings: list[list[float]] = []
-    for i in range(0, len(all_texts), batch_size):
-        batch = all_texts[i : i + batch_size]
-        logger.info("  Embedding batch %d–%d of %d", i, i + len(batch), len(all_texts))
-        batch_embeddings = embedder.embed(batch)
-        all_embeddings.extend(batch_embeddings)
-
-    # Attach embeddings to records
-    for rec, emb in zip(all_chunk_records, all_embeddings):
-        rec.embedding = emb
-
-    # 5. Store
-    logger.info("=== Step 5: Upserting into Postgres ===")
+    affected = 0
     db = SessionLocal()
     try:
-        affected = upsert_chunks(db, all_chunk_records)
+        for i in range(0, len(all_texts), batch_size):
+            batch = all_texts[i : i + batch_size]
+            logger.info("  Embedding batch %d–%d of %d", i, i + len(batch), len(all_texts))
+            batch_embeddings = embedder.embed(batch)
+
+            batch_records = all_chunk_records[i : i + len(batch)]
+            for rec, emb in zip(batch_records, batch_embeddings):
+                rec.embedding = emb
+
+            affected += upsert_chunks(db, batch_records)
+
         total = get_chunk_count(db)
     finally:
         db.close()
