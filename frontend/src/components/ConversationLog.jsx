@@ -110,6 +110,35 @@ export default function ConversationLog({ messages, loading, sessionLoading, err
             <p className="empty-sub">
               Ask anything from Lenny's podcast — strategy, metrics, frameworks, founder stories.
             </p>
+            <div className="preset-chips-container">
+              <span className="preset-chips-title">Try a sample prompt</span>
+              <div className="preset-chips-grid">
+                <button 
+                  className="preset-chip-btn" 
+                  onClick={() => onSend("How do I design a retention loop based on Lenny podcast insights?")}
+                >
+                  <span className="preset-chip-icon">💡</span>
+                  <span className="preset-chip-label">Retention Loops</span>
+                  <span className="preset-chip-query">Grounded Q&A</span>
+                </button>
+                <button 
+                  className="preset-chip-btn" 
+                  onClick={() => onSend("Write a Ship 30 essay on finding product-market fit")}
+                >
+                  <span className="preset-chip-icon">✍️</span>
+                  <span className="preset-chip-label">Ship 30 Essay</span>
+                  <span className="preset-chip-query">Product-Market Fit</span>
+                </button>
+                <button 
+                  className="preset-chip-btn" 
+                  onClick={() => onSend("Generate an HTML snippet for a SaaS growth metrics dashboard")}
+                >
+                  <span className="preset-chip-icon">📊</span>
+                  <span className="preset-chip-label">HTML Dashboard</span>
+                  <span className="preset-chip-query">Artifact UI Generator</span>
+                </button>
+              </div>
+            </div>
           </div>
         ))}
 

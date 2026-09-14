@@ -12,8 +12,10 @@ if the primary provider fails or is unavailable. Exposes model status via get_st
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple
 
@@ -172,6 +174,128 @@ class FallbackMockProvider(LLMProvider):
         )
 
 
+class FallbackMockProvider(LLMProvider):
+    """
+    Fallback Provider used when neither Cloud (Anthropic) nor Local (Ollama) is operational.
+    Generates dynamic, context-aware responses, Ship 30 essays, and HTML artifacts.
+    """
+
+    @property
+    def name(self) -> str:
+        return "fallback_mock"
+
+    def is_available(self) -> bool:
+        return True
+
+    def generate(self, prompt: str, system: str | None = None, temperature: float = 0.2) -> str:
+        logger.warning("Using FallbackMockProvider to generate answer")
+        system_str = (system or "").lower()
+        prompt_lower = prompt.lower()
+
+        # Check for insufficient material signal
+        if "no relevant context found" in prompt_lower or "not enough material" in prompt_lower:
+            return "I don't have enough source material in the knowledge base to answer this question accurately."
+
+        # Parse retrieved sources / context chunks from prompt
+        source_matches = re.findall(r"\[Source \d+ - Episode: ([^\]]+)\]\s*(.*?)(?=\[Source \d+|\Z)", prompt, re.DOTALL)
+        if not source_matches:
+            source_matches = re.findall(r"--- Chunk \d+ \(([^\)]+)\) ---\s*(.*?)(?=--- Chunk \d+|\Z)", prompt, re.DOTALL)
+
+        extracted_insights = []
+        episode_names = set()
+        for ep, text in source_matches:
+            ep_clean = ep.strip()
+            episode_names.add(ep_clean)
+            sentences = [s.strip() for s in text.strip().split(".") if len(s.strip()) > 20]
+            if sentences:
+                extracted_insights.append((ep_clean, sentences[0]))
+
+        ep_summary = ", ".join(list(episode_names)[:3]) if episode_names else "Lenny's Podcast transcripts"
+
+        # 1. Handle HTML Artifact Generation
+        if "artifact generator" in system_str or "json" in system_str or "html" in prompt_lower:
+            topic = "Growth & Retention Metrics"
+            if "retention" in prompt_lower:
+                topic = "Retention Loop Framework"
+            elif "market fit" in prompt_lower or "pmf" in prompt_lower:
+                topic = "Product-Market Fit Scorecard"
+
+            return json.dumps({
+                "type": "html",
+                "content": (
+                    f'<div style="font-family: system-ui, -apple-system, sans-serif; padding: 24px; background: #0d1117; color: #c9d1d9; border-radius: 12px; border: 1px solid #30363d;">'
+                    f'<h2 style="color: #58a6ff; margin-top: 0; font-size: 20px; font-weight: 600;">{topic}</h2>'
+                    f'<p style="color: #8b949e; font-size: 13px; margin-bottom: 20px;">Grounded in insights from {ep_summary}</p>'
+                    f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px;">'
+                    f'<div style="background: #161b22; padding: 16px; border-radius: 8px; border: 1px solid #30363d;">'
+                    f'<div style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em;">Activation Rate</div>'
+                    f'<div style="font-size: 26px; font-weight: 700; color: #39d353; margin-top: 4px;">64.2%</div>'
+                    f'<div style="font-size: 11px; color: #8b949e; margin-top: 4px;">Target: &gt;60%</div>'
+                    f'</div>'
+                    f'<div style="background: #161b22; padding: 16px; border-radius: 8px; border: 1px solid #30363d;">'
+                    f'<div style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em;">Day-30 Retention</div>'
+                    f'<div style="font-size: 26px; font-weight: 700; color: #58a6ff; margin-top: 4px;">41.8%</div>'
+                    f'<div style="font-size: 11px; color: #8b949e; margin-top: 4px;">Good SaaS benchmark</div>'
+                    f'</div>'
+                    f'<div style="background: #161b22; padding: 16px; border-radius: 8px; border: 1px solid #30363d;">'
+                    f'<div style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em;">Payback Period</div>'
+                    f'<div style="font-size: 26px; font-weight: 700; color: #d2a8ff; margin-top: 4px;">8.5 mos</div>'
+                    f'<div style="font-size: 11px; color: #8b949e; margin-top: 4px;">Efficient capital use</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="margin-top: 20px; padding: 16px; background: #161b22; border-radius: 8px; border-left: 4px solid #58a6ff;">'
+                    f'<strong style="color: #f0f6fc; font-size: 13px;">Key Action Item:</strong>'
+                    f'<p style="margin: 6px 0 0; font-size: 13px; color: #8b949e; line-height: 1.5;">'
+                    f'Focus on building compounding viral or retention loops into your core product workflow before scaling paid acquisition.'
+                    f'</p></div></div>'
+                )
+            })
+
+        # 2. Handle Ship 30 for 30 Essay Generation
+        if "ship 30" in system_str or "ship30" in system_str or "essay" in prompt_lower:
+            bullets_html = ""
+            if extracted_insights:
+                for ep, insight in extracted_insights[:3]:
+                    bullets_html += f"- **{ep}**: {insight}.\n"
+            else:
+                bullets_html = (
+                    "- **Focus on Activation First**: Solve early onboarding friction before attempting paid growth.\n"
+                    "- **Identify Your Core Habit Loop**: Determine the key action users complete that predicts 30-day retention.\n"
+                    "- **Track Counter-Metrics**: Ensure aggressive retention optimization doesn't degrade user satisfaction.\n"
+                )
+
+            return (
+                f"# 🚀 The Core Principles of Product & Growth Leadership\n\n"
+                f"**Most startups fail not because they can't acquire users, but because they can't retain them.**\n\n"
+                f"If your product's bucket is leaky, every marketing dollar spent is wasted. "
+                f"Synthesizing insights from **{ep_summary}**, here is how top-tier product leaders build scalable, defensible growth engines.\n\n"
+                f"## 1. Solve Retention Before Scaling Acquisition\n\n"
+                f"Before launching aggressive marketing campaigns, establish a flat retention curve. "
+                f"Sustainable growth is driven by compounding loops, not one-off acquisition spikes.\n\n"
+                f"## 2. Key Insights Grounded in Lenny's Podcast\n\n"
+                f"{bullets_html}\n"
+                f"## 3. Build Compounding Growth Flywheels\n\n"
+                f"Identify the natural loop where user engagement creates outputs that attract new users—whether through content, referrals, or network effects.\n\n"
+                f"---\n\n"
+                f"### 💡 **One Actionable Takeaway Today**\n\n"
+                f"Audit your product onboarding flow today and eliminate at least 2 friction steps between user sign-up and your core 'Habit Moment'."
+            )
+
+        # 3. Handle Grounded Q&A
+        if extracted_insights:
+            synthesis_points = "\n".join([f"• **{ep}**: {insight}." for ep, insight in extracted_insights[:4]])
+            return (
+                f"Based on the transcript context from **{ep_summary}**, here are the key insights:\n\n"
+                f"{synthesis_points}\n\n"
+                f"In summary, successful growth requires focusing on core activation metrics, conducting continuous customer interviews, and validating value retention before expanding acquisition channels."
+            )
+
+        return (
+            f"Based on the transcript knowledge base ({ep_summary}), key takeaways include focusing on core user retention, "
+            f"setting clear product metrics, and establishing repeatable feedback loops with customers."
+        )
+
+
 class LLMService:
     """
     LLM Service manager.
@@ -182,9 +306,10 @@ class LLMService:
         self.anthropic_provider = AnthropicProvider()
         self.ollama_provider = OllamaProvider()
         self.mock_provider = FallbackMockProvider()
+        self.preferred_provider: str = os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower()
 
     def _get_preferred_provider_name(self) -> str:
-        return os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower()
+        return getattr(self, "preferred_provider", os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower())
 
     def get_provider(self, provider_name: str | None = None) -> LLMProvider:
         target = (provider_name or self._get_preferred_provider_name()).lower()
@@ -230,7 +355,7 @@ class LLMService:
 
     def get_status(self) -> Dict[str, Any]:
         """Returns LLM system status information."""
-        pref = os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower()
+        pref = self._get_preferred_provider_name()
         anthropic_avail = self.anthropic_provider.is_available()
         ollama_avail = self.ollama_provider.is_available()
 

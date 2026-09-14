@@ -32,15 +32,40 @@ function ArtifactTab({ artifact }) {
 
   const isHtml = artifact.type === 'html'
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(artifact.content)
+    alert('Copied artifact content to clipboard!')
+  }
+
+  const handleDownload = () => {
+    const ext = isHtml ? 'html' : 'md'
+    const mime = isHtml ? 'text/html' : 'text/markdown'
+    const blob = new Blob([artifact.content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `growth_room_artifact.${ext}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="artifact-container">
       <div className="artifact-header">
         <span className="artifact-badge">{artifact.type.toUpperCase()}</span>
-        {isHtml && (
-          <button className="btn-minimal" onClick={() => setViewRaw(!viewRaw)}>
-            {viewRaw ? 'View Rendered' : 'View Source'}
+        <div className="artifact-actions">
+          {isHtml && (
+            <button className="btn-minimal" onClick={() => setViewRaw(!viewRaw)}>
+              {viewRaw ? 'View Rendered' : 'View Source'}
+            </button>
+          )}
+          <button className="btn-minimal" onClick={handleCopy} title="Copy to clipboard">
+            📋 Copy
           </button>
-        )}
+          <button className="btn-minimal" onClick={handleDownload} title="Download file">
+            ⬇️ Download
+          </button>
+        </div>
       </div>
 
       <div className="artifact-body">
@@ -168,19 +193,21 @@ function ModelTab() {
           <label>
             <input type="radio" value="auto" name="provider" 
               disabled={loading}
-              checked={!['anthropic','ollama'].includes(statusData.configured_provider) || true} // Simplifying state for override
+              checked={!['anthropic','ollama'].includes(statusData.configured_provider)}
               onChange={handleProviderSwitch} />
             Auto (Env default)
           </label>
           <label>
             <input type="radio" value="anthropic" name="provider" 
               disabled={loading}
-               onChange={handleProviderSwitch} />
+              checked={statusData.configured_provider === 'anthropic'}
+              onChange={handleProviderSwitch} />
             Force Anthropic
           </label>
           <label>
             <input type="radio" value="ollama" name="provider" 
               disabled={loading}
+              checked={statusData.configured_provider === 'ollama'}
               onChange={handleProviderSwitch} />
             Force Ollama
           </label>
