@@ -6,6 +6,22 @@
 import { useRef, useEffect } from 'react'
 import Markdown from 'react-markdown'
 
+const SKILL_LABELS = {
+  grounded_qa:  { icon: '🔍', label: 'Grounded Q&A' },
+  ship30:       { icon: '✍️', label: 'Ship 30 Essay' },
+  artifact_gen: { icon: '📄', label: 'Artifact Gen' },
+}
+
+function SkillBadge({ skillName }) {
+  if (!skillName) return null
+  const { icon, label } = SKILL_LABELS[skillName] || { icon: '🤖', label: skillName }
+  return (
+    <span className="skill-badge" title={`Routed to: ${skillName}`}>
+      {icon} {label}
+    </span>
+  )
+}
+
 function GroundingMeter({ score, skillUsed }) {
   if (skillUsed !== 'grounding_score' && score === undefined) return null
 
@@ -82,8 +98,11 @@ export default function ConversationLog({ messages, loading, sessionLoading, err
           <div className="conversation-messages">
             {messages.map((msg) => (
               <article key={msg.id} className={`message-bubble ${msg.role}`}>
-                <div className="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</div>
-                
+                <div className="role-label-row">
+                  <span className="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
+                  {msg.role === 'assistant' && <SkillBadge skillName={msg.skill_used} />}
+                </div>
+
                 {msg.role === 'assistant' && msg.grounding_score !== undefined && (
                   <GroundingMeter score={msg.grounding_score} skillUsed={msg.skill_used} />
                 )}

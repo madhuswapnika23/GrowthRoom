@@ -1,5 +1,14 @@
 /**
  * RightPanel — Artifacts, Sources, and Model controls
+ *
+ * ArtifactTab security notes:
+ *   - HTML artifacts are rendered in a sandboxed <iframe> with sandbox=""
+ *     (the empty string is the strictest mode: blocks scripts, popups, form
+ *     submission, same-origin access, and top-navigation).
+ *   - allow-scripts is intentionally NOT added — all generated HTML is
+ *     treated as untrusted content.
+ *   - CSP-equivalent constraint is enforced via the sandbox attribute itself.
+ *   - Markdown artifacts are rendered via react-markdown (no eval/innerHTML).
  */
 
 import { useState, useEffect } from 'react'
@@ -8,8 +17,14 @@ import Markdown from 'react-markdown'
 const TABS = ['Artifact', 'Sources', 'Model']
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+// --------------------------------------------------------------------------
+// Artifact Tab
+// --------------------------------------------------------------------------
 function ArtifactTab({ artifact }) {
   const [viewRaw, setViewRaw] = useState(false)
+
+  // Reset raw toggle whenever the artifact changes (e.g. session switch)
+  useEffect(() => { setViewRaw(false) }, [artifact])
 
   if (!artifact) {
     return (
@@ -24,7 +39,8 @@ function ArtifactTab({ artifact }) {
           </div>
         </div>
         <p className="text-muted" style={{ fontSize: '12px', marginTop: '8px' }}>
-          Artifacts will appear here after the assistant generates a structured response.
+          Artifacts will appear here after the assistant generates a Ship&nbsp;30 essay,
+          an HTML dashboard, or a one-pager.
         </p>
       </div>
     )
@@ -34,7 +50,8 @@ function ArtifactTab({ artifact }) {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(artifact.content)
-    alert('Copied artifact content to clipboard!')
+      .then(() => alert('Copied to clipboard!'))
+      .catch(() => alert('Copy failed — please select the text manually.'))
   }
 
   const handleDownload = () => {
@@ -51,38 +68,62 @@ function ArtifactTab({ artifact }) {
 
   return (
     <div className="artifact-container">
+      {/* Header: badge + actions */}
       <div className="artifact-header">
-        <span className="artifact-badge">{artifact.type.toUpperCase()}</span>
+        <span className={`artifact-badge artifact-badge-${artifact.type}`}>
+          {artifact.type.toUpperCase()}
+        </span>
         <div className="artifact-actions">
-          {isHtml && (
-            <button className="btn-minimal" onClick={() => setViewRaw(!viewRaw)}>
-              {viewRaw ? 'View Rendered' : 'View Source'}
-            </button>
-          )}
+          {/* Toggle available for both HTML and Markdown */}
+          <button
+            id="btn-artifact-toggle"
+            className="btn-minimal"
+            onClick={() => setViewRaw(r => !r)}
+            title={viewRaw ? 'Show rendered view' : 'Show raw source'}
+          >
+            {viewRaw ? '👁 Rendered' : '</> Source'}
+          </button>
           <button className="btn-minimal" onClick={handleCopy} title="Copy to clipboard">
             📋 Copy
           </button>
           <button className="btn-minimal" onClick={handleDownload} title="Download file">
-            ⬇️ Download
+            ⬇ Download
           </button>
         </div>
       </div>
 
+      {/* Body */}
       <div className="artifact-body">
-        {isHtml && !viewRaw ? (
-          <div className="iframe-wrapper">
-            <iframe
-              title="Rendered UI"
-              srcDoc={artifact.content}
-              sandbox="" // Strict sandbox: no script execution, no top navigation
-              style={{ width: '100%', height: '400px', border: 'none', background: '#fff' }}
-            />
-          </div>
-        ) : isHtml && viewRaw ? (
+        {viewRaw ? (
+          /* Raw source view — shown for both HTML and Markdown */
           <pre className="code-block">
             <code>{artifact.content}</code>
           </pre>
+        ) : isHtml ? (
+          /*
+           * Sandboxed iframe — security notes:
+           *   - sandbox="" (empty) is the strictest level: no scripts, no
+           *     same-origin access, no form submission, no popups.
+           *   - allow-scripts is deliberately omitted.
+           *   - srcDoc avoids any HTTP request for the content.
+           */
+          <div className="iframe-wrapper">
+            <iframe
+              id="artifact-iframe"
+              title="Rendered HTML artifact"
+              srcDoc={artifact.content}
+              sandbox=""
+              style={{
+                width: '100%',
+                height: '460px',
+                border: 'none',
+                background: '#fff',
+                display: 'block',
+              }}
+            />
+          </div>
         ) : (
+          /* Markdown rendered view */
           <div className="markdown-artifact">
             <Markdown>{artifact.content}</Markdown>
           </div>
@@ -92,27 +133,46 @@ function ArtifactTab({ artifact }) {
   )
 }
 
+// --------------------------------------------------------------------------
+// Sources Tab
+// --------------------------------------------------------------------------
 function SourcesTab({ sources }) {
   if (!sources || sources.length === 0) {
-    return <p className="text-muted" style={{ fontSize: '12px' }}>No sources retrieved for current context.</p>
+    return (
+      <p className="text-muted" style={{ fontSize: '12px' }}>
+        No sources retrieved for current context.
+      </p>
+    )
   }
 
   return (
     <div>
       <p className="text-muted" style={{ fontSize: '11px', marginBottom: '12px' }}>
-        {sources.length} sources cited
+        {sources.length} source{sources.length !== 1 ? 's' : ''} cited
       </p>
       {sources.map((s, idx) => (
         <div key={idx} className="source-chip">
           <div className="source-episode">
             <span className="source-index">[{idx + 1}]</span> {s.episode_title}
           </div>
+          {s.guest && (
+            <div className="source-guest">{s.guest}</div>
+          )}
           <div className="source-meta">
             {s.segment_timestamp && <span>{s.segment_timestamp} · </span>}
-            {s.relevance_score !== null && <span>Score: {s.relevance_score.toFixed(3)}</span>}
+            {s.relevance_score != null && (
+              <span>Score: {s.relevance_score.toFixed(3)}</span>
+            )}
           </div>
           {s.source_url && (
-            <a href={s.source_url} target="_blank" rel="noreferrer" className="source-link">Watch on YouTube ↗</a>
+            <a
+              href={s.source_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="source-link"
+            >
+              Watch on YouTube ↗
+            </a>
           )}
         </div>
       ))}
@@ -120,6 +180,9 @@ function SourcesTab({ sources }) {
   )
 }
 
+// --------------------------------------------------------------------------
+// Model Tab
+// --------------------------------------------------------------------------
 function ModelTab() {
   const [statusData, setStatusData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -130,13 +193,11 @@ function ModelTab() {
       const json = await res.json()
       setStatusData(json.data)
     } catch (e) {
-      console.error(e)
+      console.error('Model status fetch failed:', e)
     }
   }
 
-  useEffect(() => {
-    fetchStatus()
-  }, [])
+  useEffect(() => { fetchStatus() }, [])
 
   const handleProviderSwitch = async (e) => {
     setLoading(true)
@@ -149,15 +210,16 @@ function ModelTab() {
       })
       await fetchStatus()
     } catch (err) {
-      console.error(err)
+      console.error('Provider switch failed:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  if (!statusData) return <div className="text-muted">Loading model status...</div>
+  if (!statusData) {
+    return <div className="text-muted">Loading model status…</div>
+  }
 
-  // Determine pill status
   let pillClass = 'status-green'
   let pillText = 'Connected'
   if (statusData.fallback_active) {
@@ -172,7 +234,6 @@ function ModelTab() {
           <div className="card-label">Provider Status</div>
           <div className={`status-pill ${pillClass}`}>{pillText}</div>
         </div>
-        
         <table className="model-table">
           <tbody>
             <tr>
@@ -191,42 +252,55 @@ function ModelTab() {
         <div className="card-label">Provider Override</div>
         <div className="radio-group" style={{ marginTop: '8px' }}>
           <label>
-            <input type="radio" value="auto" name="provider" 
+            <input
+              type="radio" value="auto" name="provider"
               disabled={loading}
-              checked={!['anthropic','ollama'].includes(statusData.configured_provider)}
-              onChange={handleProviderSwitch} />
-            Auto (Env default)
+              checked={!['anthropic', 'ollama'].includes(statusData.configured_provider)}
+              onChange={handleProviderSwitch}
+            />
+            Auto (env default)
           </label>
           <label>
-            <input type="radio" value="anthropic" name="provider" 
+            <input
+              type="radio" value="anthropic" name="provider"
               disabled={loading}
               checked={statusData.configured_provider === 'anthropic'}
-              onChange={handleProviderSwitch} />
+              onChange={handleProviderSwitch}
+            />
             Force Anthropic
           </label>
           <label>
-            <input type="radio" value="ollama" name="provider" 
+            <input
+              type="radio" value="ollama" name="provider"
               disabled={loading}
               checked={statusData.configured_provider === 'ollama'}
-              onChange={handleProviderSwitch} />
+              onChange={handleProviderSwitch}
+            />
             Force Ollama
           </label>
         </div>
         <p className="text-muted" style={{ fontSize: '11px', marginTop: '8px' }}>
-          Currently active provider will fallback if forced selection is offline.
+          Falls back automatically if the forced selection is offline.
         </p>
       </div>
     </div>
   )
 }
 
-export default function RightPanel({ activeTab, onTabChange, sources, artifact, mobileVisible, mobilePanel }) {
-  // Always show on desktop. On mobile, show only if mobilePanel matches one of the tabs
-  const isMobileArtifact = mobileVisible && mobilePanel === 'artifact'
-  const isMobileSources = mobileVisible && mobilePanel === 'sources'
+// --------------------------------------------------------------------------
+// RightPanel
+// --------------------------------------------------------------------------
+export default function RightPanel({
+  activeTab, onTabChange, sources, artifact, mobileVisible, mobilePanel,
+}) {
+  const effTab = mobileVisible
+    ? (mobilePanel === 'artifact' ? 'Artifact' : mobilePanel === 'sources' ? 'Sources' : activeTab)
+    : activeTab
 
-  // If mobile, force the activeTab to match mobilePanel to keep things in sync
-  const effTab = mobileVisible ? (mobilePanel === 'artifact' ? 'Artifact' : (mobilePanel === 'sources' ? 'Sources' : activeTab)) : activeTab
+  // Auto-switch to Artifact tab when a new artifact arrives
+  useEffect(() => {
+    if (artifact) onTabChange('Artifact')
+  }, [artifact])   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <aside className={`right-panel ${mobileVisible === false ? 'mobile-hidden' : ''}`}>
@@ -245,10 +319,14 @@ export default function RightPanel({ activeTab, onTabChange, sources, artifact, 
         ))}
       </nav>
 
-      <div className="panel-content" role="tabpanel" aria-labelledby={`tab-${effTab.toLowerCase()}`}>
+      <div
+        className="panel-content"
+        role="tabpanel"
+        aria-labelledby={`tab-${effTab.toLowerCase()}`}
+      >
         {effTab === 'Artifact' && <ArtifactTab artifact={artifact} />}
-        {effTab === 'Sources' && <SourcesTab sources={sources} />}
-        {effTab === 'Model' && <ModelTab />}
+        {effTab === 'Sources'  && <SourcesTab  sources={sources}   />}
+        {effTab === 'Model'    && <ModelTab />}
       </div>
     </aside>
   )

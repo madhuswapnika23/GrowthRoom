@@ -600,6 +600,42 @@ code, pre { font-family: var(--font-mono); font-size: 13px; }
   font-weight: 600;
   letter-spacing: 0.1em;
 }
+/* Colored type variants */
+.artifact-badge-html {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+}
+.artifact-badge-markdown {
+  background: var(--color-accent-faint);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-dim);
+}
+
+/* Skill badge in message header */
+.role-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.skill-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Guest name in source chip */
+.source-guest {
+  font-size: 11px;
+  color: var(--color-accent-dim);
+  font-style: italic;
+}
+
 .btn-minimal {
   background: none;
   border: 1px solid var(--color-border);

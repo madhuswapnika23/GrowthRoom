@@ -4,6 +4,11 @@ Agent Router for Growth Room.
 Inspects user input messages, applies decision logic to select the appropriate
 Agent Skill (grounded_qa, ship30, or artifact_gen), logs the decision with structured
 context, and executes the selected skill.
+
+Routing priority (highest → lowest):
+  1. Ship30 — essay/post writing requests
+  2. ArtifactGen — page/doc/HTML generation requests
+  3. GroundedQA — default factual Q&A
 """
 
 from __future__ import annotations
@@ -19,17 +24,47 @@ from app.agent.skills.artifact_gen import ArtifactGenSkill
 
 logger = logging.getLogger(__name__)
 
-# Keyword lists for heuristic routing
-SHIP30_KEYWORDS = {
-    "ship 30", "ship30", "essay", "post", "atomic essay", "article",
-    "thought leadership", "newsletter", "write a post", "write an essay"
-}
+# ---------------------------------------------------------------------------
+# Ship 30 for 30 — phrase/keyword triggers
+# ---------------------------------------------------------------------------
+# These are checked first. Any substring match → ship30 skill.
+SHIP30_TRIGGERS = [
+    "ship 30", "ship30", "atomic essay",
+    "write a post", "write me a post", "draft a post", "draft an essay",
+    "write an essay", "write me an essay",
+    "write an article", "write me an article",
+    "create a post", "create an essay", "create an article",
+    "turn this into an essay", "turn this into a post",
+    "thought leadership", "newsletter",
+    # standalone "post" and "essay" as whole words are intentionally NOT here
+    # because they're too broad; use the multi-word phrases above instead.
+]
 
-ARTIFACT_KEYWORDS = {
+# ---------------------------------------------------------------------------
+# Artifact-generation — explicit page/doc/HTML triggers
+# ---------------------------------------------------------------------------
+ARTIFACT_EXPLICIT_PHRASES = [
+    "one-pager", "onepager", "one pager",
+    "landing page", "landing-page",
+    "make me a page", "make me a doc", "make me a dashboard",
+    "make a one-pager", "make a landing page",
+    "generate a doc", "generate a page", "generate a dashboard",
+    "create a doc", "create a page", "create a one-pager",
+    "build a page", "build a dashboard", "build a one-pager",
+    "turn this into a page", "turn this into a dashboard",
+    "turn this into html", "turn this into a doc",
+    # legacy keyword set kept for backward compat
     "generate doc", "create document", "html snippet", "build ui",
     "create component", "artifact", "generate html", "generate markdown",
-    "dashboard component", "ui snippet", "html code"
-}
+    "dashboard component", "ui snippet", "html code",
+]
+
+# Artifact fallback: action verb + target noun combo
+ARTIFACT_ACTION_VERBS = ("generate", "create", "build", "make", "design")
+ARTIFACT_TARGET_NOUNS = (
+    "artifact", "html", "markdown", "component", "dashboard",
+    "ui", "snippet", "document",
+)
 
 
 class AgentRouter:
@@ -48,34 +83,29 @@ class AgentRouter:
 
         Returns: (skill_name, reasoning_summary)
         """
-        q_lower = query.lower()
+        q = query.lower()
 
-        # Check Ship 30 keywords
-        for kw in SHIP30_KEYWORDS:
-            if kw in q_lower:
-                reason = f"Query matched Ship 30 keyword '{kw}'"
+        # 1. Ship30 — checked first (highest priority)
+        for trigger in SHIP30_TRIGGERS:
+            if trigger in q:
+                reason = f"Ship30 trigger matched: '{trigger}'"
                 return "ship30", reason
 
-        # Artifact requests commonly combine an action with a format or UI term.
-        artifact_action = any(
-            phrase in q_lower
-            for phrase in ("generate", "create", "build", "make", "design")
-        )
-        artifact_target = any(
-            phrase in q_lower
-            for phrase in (
-                "artifact", "html", "markdown", "component", "dashboard",
-                "ui", "snippet", "document",
-            )
-        )
-        if (artifact_action and artifact_target) or any(
-            kw in q_lower for kw in ARTIFACT_KEYWORDS
-        ):
-            reason = "Query matched Artifact Generation intent"
+        # 2. Artifact generation — explicit phrases
+        for phrase in ARTIFACT_EXPLICIT_PHRASES:
+            if phrase in q:
+                reason = f"ArtifactGen explicit phrase matched: '{phrase}'"
+                return "artifact_gen", reason
+
+        # 3. Artifact generation — action + target combo
+        has_action = any(v in q for v in ARTIFACT_ACTION_VERBS)
+        has_target = any(n in q for n in ARTIFACT_TARGET_NOUNS)
+        if has_action and has_target:
+            reason = "ArtifactGen action+target combo matched"
             return "artifact_gen", reason
 
-        # Default fallback to Grounded Q&A
-        reason = "Default fallback for factual/analytical knowledge base query"
+        # 4. Default → Grounded Q&A
+        reason = "Default: factual/analytical knowledge-base query"
         return "grounded_qa", reason
 
     def route_and_execute(self, query: str, history: list[dict], db: Session) -> SkillResult:
@@ -85,12 +115,21 @@ class AgentRouter:
         skill_name, reason = self.route(query)
 
         logger.info(
-            "ROUTER_DECISION | query='%s' | selected_skill='%s' | reason='%s'",
-            query, skill_name, reason
+            "ROUTER_DECISION | skill=%r | reason=%r | query=%r",
+            skill_name, reason, query[:120],
         )
 
         skill = self.skills.get(skill_name, self.skills["grounded_qa"])
         result = skill.execute(query, history, db)
+
+        logger.info(
+            "SKILL_RESULT | skill=%r | grounding=%.3f | has_artifact=%s | sources=%d",
+            result.skill_name,
+            result.grounding_score,
+            result.artifact is not None,
+            len(result.sources),
+        )
+
         return result
 
 
